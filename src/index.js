@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { usersRouter } from "./routes/users.route.js";
+import { usersRouter } from "./routes/users.js";
 
 dotenv.config();
 const app = express();
@@ -10,11 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.use("/auth", usersRouter);
-
-app.get("/", (req, res) => {
-  res.send("hi this from server");
-});
+app.use("/user", usersRouter);
 
 mongoose.connect(process.env.MONGODB_URL, {
   useNewUrlParser: true,
