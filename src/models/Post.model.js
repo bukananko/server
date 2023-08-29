@@ -1,14 +1,10 @@
 import mongoose from "mongoose";
 
 const PostSchema = new mongoose.Schema({
-  caption: { type: String, required: true },
-  image: { type: String, required: true },
-  comment: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "comments", required: true },
-  ],
-  likes: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "users", required: true },
-  ],
+  caption: { type: String },
+  image: { type: String },
+  comments: [{ type: mongoose.Schema.Types.ObjectId, ref: "comments" }],
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "users" }],
   userOwner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "users",
