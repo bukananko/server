@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { usersRouter } from "./routes/users.js";
 import { postsRouter } from "./routes/posts.js";
+import { commentsRouter } from "./routes/comment.js";
 
 dotenv.config();
 const app = express();
@@ -13,6 +14,7 @@ app.use(cors());
 
 app.use("/user", usersRouter);
 app.use("/post", postsRouter);
+app.use("/comment", commentsRouter);
 
 mongoose.connect(process.env.MONGODB_URL, {
   useNewUrlParser: true,

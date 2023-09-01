@@ -4,6 +4,7 @@ import * as controller from "../controllers/Post.controller.js";
 const router = express.Router();
 
 router.post("/", controller.newPost);
+router.get("/", controller.getPost);
 router.delete("/:id", controller.deletePost);
 router.put("/like/:id", controller.likePost);
 router.put("/dislike/:id", controller.dislikePost);
