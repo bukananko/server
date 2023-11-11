@@ -7,8 +7,9 @@ const RepliesSchema = new mongoose.Schema({
     ref: "comments",
     required: true,
   },
-  reply: { type: String },
+  text: { type: String },
   image: { type: String },
+  createdAt: { type: Date, default: Date.now },
 });
 
 export const RepliesModel = mongoose.model("replies", RepliesSchema);

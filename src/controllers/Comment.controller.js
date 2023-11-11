@@ -1,92 +1,191 @@
 import { PostModel } from "../models/Post.model.js";
 import { CommentModel } from "../models/Comment.model.js";
 import { RepliesModel } from "../models/Replies.model.js";
+import { UserModel } from "../models/User.model.js";
+import { ActivitiesModel } from "../models/Activities.model.js";
 
-export const getComment = async (req, res) => {
+export const getCommentById = async (req, res) => {
+  const { id } = req.query;
+
   try {
-    const comments = await CommentModel.find().populate("replies");
-    res.json(comments);
+    const comment = await CommentModel.findById(id).populate([
+      {
+        path: "owner",
+        select: "username verify picture name",
+      },
+      {
+        path: "ref",
+        populate: [
+          {
+            path: "owner",
+            select: "username verify picture",
+          },
+          {
+            path: "comments",
+            select: "_id replies",
+          },
+        ],
+      },
+    ]);
+    res.json({ success: true, data: comment });
   } catch (error) {
-    res.json({ message: error.message });
+    res.json({ success: false, message: error.message });
   }
 };
 
-export const newComment = async (req, res) => {
-  const { comment, image, ref, owner } = req.body;
+export const getCommentInPost = async (req, res) => {
+  const { postId } = req.params;
+  const { skip } = req.query;
+
+  try {
+    const comments = await CommentModel.find({ ref: { $in: postId } })
+      .populate([
+        { path: "owner", select: "username picture verify" },
+        { path: "replies" },
+      ])
+      .limit(10)
+      .skip(skip ?? 0);
+
+    res.json({ success: true, data: comments });
+  } catch (error) {
+    res.json({ success: false, message: error.message });
+  }
+};
+
+export const createComment = async (req, res) => {
+  const { text, image, ref, owner } = req.body;
+  const { postId } = req.params;
 
   try {
     const postNewComment = new CommentModel({
-      comment,
+      text,
       image,
       ref,
       owner,
     });
     await postNewComment.save();
 
-    await PostModel.findByIdAndUpdate(req.params.postId, {
+    await PostModel.findByIdAndUpdate(postId, {
       $push: {
         comments: postNewComment._id,
       },
     });
 
-    res.json(postNewComment);
+    const post = await PostModel.findById(ref).populate({
+      path: "owner",
+      select: "-password",
+    });
+
+    if (text.match(/@\w+/g)) {
+      const mentionedUsers = text
+        .match(/@\w+/g)
+        .map((username) => username.slice(1));
+
+      const getMentionedUsersId = await UserModel.find({
+        username: {
+          $in: mentionedUsers,
+        },
+      }).select("_id");
+
+      const filteredId = getMentionedUsersId.filter(
+        (data) => data._id.toString() !== owner
+      );
+
+      const newActivity = new ActivitiesModel({
+        owner: filteredId,
+        contentModel: "comments",
+        refModel: "posts",
+        type: "mentions",
+        message: "Mentioned you in a comment",
+        author: postNewComment.owner._id,
+        content: postNewComment._id,
+        ref: post._id,
+      });
+      await newActivity.save();
+
+      await UserModel.find({
+        _id: {
+          $in: newActivity.owner,
+        },
+      }).updateMany({
+        $push: {
+          activities: newActivity._id,
+        },
+      });
+    }
+
+    if (postNewComment.owner._id.toString() !== post.owner._id.toString()) {
+      const newActivity = new ActivitiesModel({
+        owner: post.owner._id,
+        contentModel: "comments",
+        refModel: "posts",
+        type: "forYou",
+        author: postNewComment.owner._id,
+        message: "Commented on your post",
+        content: postNewComment._id,
+        ref: post._id,
+      });
+      await newActivity.save();
+
+      await UserModel.findByIdAndUpdate(post.owner._id, {
+        $push: {
+          activities: newActivity._id,
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Commented successfully!",
+    });
   } catch (error) {
-    res.json({ message: error.message });
+    res.json({ success: false, message: error.message });
   }
 };
 
 export const deleteComment = async (req, res) => {
-  try {
-    const comment = await CommentModel.findByIdAndDelete(req.params.commentId);
+  const { commentId } = req.params;
 
-    await PostModel.findByIdAndUpdate(comment.ref, {
+  try {
+    const deletedComment = await CommentModel.findByIdAndDelete(commentId);
+
+    await PostModel.findByIdAndUpdate(deletedComment.ref, {
       $pull: {
-        comments: comment._id,
+        comments: commentId,
       },
     });
 
-    res.json({ message: "Deleted successfully!" });
-  } catch (error) {
-    res.json({ message: error.message });
-  }
-};
-
-export const replyComment = async (req, res) => {
-  const { reply, image, ref, owner } = req.body;
-
-  try {
-    const postNewReply = new RepliesModel({
-      reply,
-      image,
-      ref,
-      owner,
+    await RepliesModel.deleteMany({
+      ref: commentId,
     });
-    await postNewReply.save();
 
-    await CommentModel.findByIdAndUpdate(req.params.commentId, {
-      $push: {
-        replies: postNewReply._id,
+    const getActivities = await ActivitiesModel.find({
+      $or: [{ content: commentId }, { ref: commentId }],
+    }).select("_id owner");
+
+    const activitiesId = getActivities.map((data) => data._id);
+    const activitiesOwnerId = getActivities.flatMap((data) => data.owner);
+
+    await ActivitiesModel.deleteMany({
+      _id: {
+        $in: activitiesId,
       },
     });
 
-    res.json({ message: "Replied successfully!" });
-  } catch (error) {
-    res.json({ message: error.message });
-  }
-};
-
-export const deleteReplyComment = async (req, res) => {
-  try {
-    const reply = await RepliesModel.findByIdAndDelete(req.params.replyId);
-
-    await CommentModel.findByIdAndUpdate(reply.ref, {
+    await UserModel.find({
+      _id: {
+        $in: activitiesOwnerId,
+      },
+    }).updateMany({
       $pull: {
-        replies: reply._id,
+        activities: {
+          $in: activitiesId,
+        },
       },
     });
 
-    res.json(reply);
+    res.json({ success: true, message: "Deleted successfully!" });
   } catch (error) {
-    res.json({ message: error.message });
+    res.json({ success: false, message: error.message });
   }
 };
