@@ -255,6 +255,31 @@ export const likePost = async (req, res) => {
   try {
     const post = await PostModel.findById(postId);
 
+    if (post.likes.includes(userId)) {
+      try {
+        await PostModel.findByIdAndUpdate(postId, {
+          $pull: {
+            likes: userId,
+          },
+        });
+
+        const deletedActivity = await ActivitiesModel.findOneAndDelete({
+          message: "liked your post",
+          ref: postId,
+        });
+
+        await UserModel.findByIdAndUpdate(post.owner._id, {
+          $pull: {
+            activities: deletedActivity._id,
+          },
+        });
+
+        return res.json({ success: true, message: "Disliked successfully!" });
+      } catch (error) {
+        return res.json({ success: false, message: error.message });
+      }
+    }
+
     await PostModel.findByIdAndUpdate(postId, {
       $addToSet: {
         likes: userId,
@@ -280,36 +305,6 @@ export const likePost = async (req, res) => {
     }
 
     res.json({ success: true, message: "Liked successfully!" });
-  } catch (error) {
-    res.json({ success: false, message: error.message });
-  }
-};
-
-export const dislikePost = async (req, res) => {
-  const { userId } = req.body;
-  const { postId } = req.params;
-
-  try {
-    const post = await PostModel.findById(postId);
-
-    await PostModel.findByIdAndUpdate(postId, {
-      $pull: {
-        likes: userId,
-      },
-    });
-
-    const deletedActivity = await ActivitiesModel.findOneAndDelete({
-      message: "liked your post",
-      ref: postId,
-    });
-
-    await UserModel.findByIdAndUpdate(post.owner._id, {
-      $pull: {
-        activities: deletedActivity._id,
-      },
-    });
-
-    res.json({ success: true, message: "Disliked successfully!" });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
